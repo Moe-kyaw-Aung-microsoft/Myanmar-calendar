@@ -16,8 +16,9 @@ import {
   isSameDay,
   addDays,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Moon, Plus, Trash2, Repeat } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Moon, Plus, Trash2, Repeat, Bell } from 'lucide-react';
 import { Mycal } from 'mycal';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface CalendarEvent {
   id: string;
@@ -35,6 +36,7 @@ export default function App() {
   });
   const [newEventTitle, setNewEventTitle] = useState('');
   const [newEventRecurrence, setNewEventRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const saveEvents = (updatedEvents: CalendarEvent[]) => {
     setEvents(updatedEvents);
@@ -78,6 +80,23 @@ export default function App() {
 
   const getEventsForDate = (date: Date) => {
     return events.filter(e => isEventOnDate(e, date));
+  };
+
+  const getUpcomingEvents = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming: { event: CalendarEvent; date: Date }[] = [];
+    
+    // Check next 30 days for any events (including recurring)
+    for (let i = 0; i < 30; i++) {
+      const day = addDays(today, i);
+      const dayEvents = getEventsForDate(day);
+      dayEvents.forEach(event => {
+        upcoming.push({ event, date: day });
+      });
+    }
+    
+    return upcoming;
   };
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -126,6 +145,9 @@ export default function App() {
   };
 
   const renderHeader = () => {
+    const upcomingEvents = getUpcomingEvents();
+    const hasEventsToday = upcomingEvents.some(({ date }) => isSameDay(date, new Date()));
+
     return (
       <div className="flex justify-between items-center py-4 px-6 border-b border-gray-200 bg-white">
         <div className="flex items-center space-x-3">
@@ -137,6 +159,86 @@ export default function App() {
           </h2>
         </div>
         <div className="flex items-center space-x-2">
+          {/* Notification Icon */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600 relative flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <Bell className="w-5 h-5" />
+              {upcomingEvents.length > 0 && (
+                <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                  {hasEventsToday && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  )}
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${hasEventsToday ? 'bg-rose-500' : 'bg-indigo-500'}`} />
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {showNotifications && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 p-4 z-50 max-h-[400px] overflow-y-auto"
+                >
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-2">
+                    <h4 className="font-bold text-gray-800 text-sm">Upcoming Events</h4>
+                    <span className="text-[10px] bg-indigo-50 text-indigo-600 font-semibold px-2 py-0.5 rounded-full">
+                      Next 30 Days ({upcomingEvents.length})
+                    </span>
+                  </div>
+                  {upcomingEvents.length === 0 ? (
+                    <div className="text-center py-6 text-gray-400 text-xs font-medium">
+                      No upcoming events
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {upcomingEvents.map(({ event, date }) => {
+                        const isEventToday = isSameDay(date, new Date());
+                        return (
+                          <div
+                            key={`${event.id}-${format(date, 'yyyy-MM-dd')}`}
+                            onClick={() => {
+                              setCurrentDate(date);
+                              setSelectedDate(date);
+                              setShowNotifications(false);
+                            }}
+                            className={`flex items-start space-x-3 p-2 rounded-xl cursor-pointer transition-colors border text-left
+                              ${isEventToday 
+                                ? 'bg-rose-50/50 hover:bg-rose-50 border-rose-100' 
+                                : 'hover:bg-indigo-50/50 border-transparent'
+                              }`}
+                          >
+                            <div className={`flex flex-col items-center justify-center rounded-lg w-10 h-10 flex-shrink-0
+                              ${isEventToday 
+                                ? 'bg-rose-100 text-rose-700' 
+                                : 'bg-indigo-50 text-indigo-600'
+                              }`}
+                            >
+                              <span className="text-xs font-bold leading-none">{format(date, 'd')}</span>
+                              <span className="text-[9px] font-semibold uppercase leading-none mt-1">{format(date, 'MMM')}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">{event.title}</p>
+                              <p className={`text-xs font-medium ${isEventToday ? 'text-rose-600' : 'text-gray-400'}`}>
+                                {isEventToday ? 'Today' : isSameDay(date, addDays(new Date(), 1)) ? 'Tomorrow' : format(date, 'EEEE, d MMM')}
+                                {event.recurrence !== 'none' && ` (${event.recurrence})`}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <button
             onClick={prevMonth}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600"
@@ -210,6 +312,11 @@ export default function App() {
         const isCurrentMonth = isSameMonth(day, monthStart);
         const isToday = isSameDay(day, new Date());
         const dayEvents = getEventsForDate(day);
+        
+        // Check if date is upcoming (today or future)
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const isUpcoming = day >= todayStart;
 
         days.push(
           <div
@@ -221,14 +328,49 @@ export default function App() {
             onClick={() => onDateClick(cloneDay)}
           >
             <div className="flex justify-between items-start">
-              <span
-                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium
-                  ${isToday ? 'bg-indigo-600 text-white shadow-sm' : ''}
-                  ${isSelected && !isToday ? 'bg-indigo-100 text-indigo-700' : ''}
-                `}
-              >
-                {formattedDate}
-              </span>
+              <div className="flex items-center">
+                <span
+                  className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium relative
+                    ${isToday ? 'bg-indigo-600 text-white shadow-sm' : ''}
+                    ${isSelected && !isToday ? 'bg-indigo-100 text-indigo-700' : ''}
+                  `}
+                >
+                  {formattedDate}
+                  {isToday && dayEvents.length > 0 && (
+                    <motion.div
+                      className="absolute inset-0 rounded-full border-2 border-indigo-400"
+                      animate={{
+                        scale: [1, 1.3, 1],
+                        opacity: [0.8, 0, 0.8],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                  )}
+                </span>
+                
+                {/* Subtle pulse indicator for future upcoming events */}
+                {!isToday && isUpcoming && dayEvents.length > 0 && (
+                  <span className="relative flex h-2 w-2 ml-1.5">
+                    <motion.span
+                      className="absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"
+                      animate={{
+                        scale: [1, 2.2, 1],
+                        opacity: [0.7, 0, 0.7],
+                      }}
+                      transition={{
+                        duration: 1.8,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+                  </span>
+                )}
+              </div>
               <span className={`text-xs font-medium ${isCurrentMonth ? 'text-amber-600' : 'text-amber-400/60'}`}>
                 {mDate.day.fd.my}
               </span>
